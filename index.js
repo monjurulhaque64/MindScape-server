@@ -30,8 +30,17 @@ async function run() {
 
     const classCollection = client.db("mindDB").collection("classes");
     const enrollCollection = client.db("mindDB").collection("enrolls");
+    const userCollection = client.db("mindDB").collection("users");
 
 
+
+    // user
+    app.post('/users', async(req, res) =>{
+      const user = req.body;
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    })
+    // classes
     app.get('/classes', async(req, res) =>{
         const result = await classCollection.find().toArray();
         res.send(result);
