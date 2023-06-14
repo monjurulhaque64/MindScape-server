@@ -29,11 +29,31 @@ async function run() {
     await client.connect();
 
     const classCollection = client.db("mindDB").collection("classes");
+    const enrollCollection = client.db("mindDB").collection("enrolls");
 
 
     app.get('/classes', async(req, res) =>{
         const result = await classCollection.find().toArray();
         res.send(result);
+    })
+
+    // enrolls
+    app.get('/enrolls' , async(req, res)=>{
+      const email = req.query.email;
+      if(!email){
+        res.send([])
+      }
+      const query = { email: email};
+      const result = await enrollCollection.find(query).toArray();
+      res.send(result);
+    })
+
+
+    app.post('/enrolls' , async(req, res)=>{
+      const item = req.body;
+      console.log(item);
+      const result = await enrollCollection.insertOne(item);
+      res.send(result);
     })
 
 
