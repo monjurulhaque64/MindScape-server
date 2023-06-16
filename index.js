@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 require('dotenv').config();
 const port = process.env.PORT || 5000;
 
@@ -154,39 +155,101 @@ async function run() {
       res.send(result);
     })
 
-    app.get('/classes/:email', verifyJWT, async (req, res) => {
-      const email = req.params.email;
-      if (!email) {
-        res.send([]);
-      }
-    
-      const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: 'provided access' });
-      }
-    
-      const query = { instructorEmail: email };
-      const result = await classCollection.find(query).toArray();
-      res.send(result);
-    });
-
-    app.get('/classes/:id', async (req, res) => {
+    app.get('/classes/instructor/:id', async (req, res) => {
       const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const options = {
+      try {
+        const query = { _id: new ObjectId(id) };
+        const options = {
           projection: {
+            _id: 1,
             name: 1,
             instructorName: 1,
             instructorEmail: 1,
             availableSeats: 1,
             price: 1
           }
+        };
+        const result = await classCollection.findOne(query, options);
+
+        if (result) {
+          res.send(result);
+        } else {
+          res.status(404).send({ error: true, message: 'Class not found' });
+        }
+      } catch (error) {
+        res.status(500).send({ error: true, message: 'Internal server error' });
+      }
+    });
+
+    app.patch('/classes/instructor/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const option = { upsert: true };
+      const classData = req.body;
+      const updatedClass = {
+        $set: {
+          name: classData.name,
+          price: classData.price,
+          availableSeats: classData.availableSeats
+        }
+      }
+      const result = await classCollection.updateOne(filter, updatedClass, option);
+      res.send(result);
+    })
+    app.patch('/classes/approve/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const updateUser = {
+        $set: {
+          status: 'approve'
+        }
+      }
+      const result = await classCollection.updateOne(filter, updateUser);
+      res.send(result);
+    })
+
+    app.patch('/classes/deny/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const updateUser = {
+        $set: {
+          status: 'deny'
+        }
+      }
+      const result = await classCollection.updateOne(filter, updateUser);
+      res.send(result);
+    })
+
+    app.patch('/classes/feedback/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const option = { upsert: true };
+      const { feedback } = req.body;
+      const updatedClass = {
+        $set: {
+          feedback: feedback,
+        },
       };
-      const result = await classCollection.findOne(query, options);
+      const result = await classCollection.updateOne(filter, updatedClass, option);
       res.send(result);
     });
-    
-    
+
+
+    app.get('/classes/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email;
+      if (!email) {
+        res.send([]);
+      }
+
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: 'provided access' });
+      }
+
+      const query = { instructorEmail: email };
+      const result = await classCollection.find(query).toArray();
+      res.send(result);
+    });
 
     app.post('/classes', async (req, res) => {
       const newClass = req.body;
@@ -196,7 +259,35 @@ async function run() {
 
 
 
+
     // enrolls
+    app.get('/enrolls/:id', async (req, res) => {
+      const id = req.params.id;
+      try {
+        const query = { _id: new ObjectId(id) };
+        const options = {
+          projection: {
+            _id: 1,
+            name: 1,
+            instructorName: 1,
+            instructorEmail: 1,
+            email: 1,
+            price: 1
+          }
+        };
+        const result = await enrollCollection.findOne(query, options);
+    
+        if (result) {
+          res.send(result);
+        } else {
+          res.status(404).send({ error: true, message: 'Class not found' });
+        }
+      } catch (error) {
+        res.status(500).send({ error: true, message: 'Internal server error' });
+      }
+    });
+    
+
     app.get('/enrolls', verifyJWT, async (req, res) => {
       const email = req.query.email;
       if (!email) {
@@ -225,6 +316,20 @@ async function run() {
       const query = { _id: new ObjectId(id) }
       const result = await enrollCollection.deleteOne(query)
       res.send(result)
+    })
+
+    // payment
+    app.post('/create-payment-intent', async (req, res) => {
+      const { price } = req.body;
+      const amount = price * 100;
+      const paymentIntent = await stripe.paymentIntent.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ['card']
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
     })
 
 
