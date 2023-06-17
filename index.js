@@ -4,10 +4,6 @@ const cors = require('cors');
 require('dotenv').config()
 const jwt = require('jsonwebtoken');
 const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
-console.log(stripe)
-// const stripe = Stripe
-
-require('dotenv').config();
 const port = process.env.PORT || 5000;
 
 
@@ -54,6 +50,9 @@ async function run() {
     const classCollection = client.db("mindDB").collection("classes");
     const enrollCollection = client.db("mindDB").collection("enrolls");
     const userCollection = client.db("mindDB").collection("users");
+    const reviewCollection = client.db("mindDB").collection("reviews");
+    
+
 
 
     app.post('/jwt', (req, res) => {
@@ -240,6 +239,48 @@ async function run() {
       res.send(result);
     });
 
+    app.patch('/classes/enroll/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const option = { upsert: true };
+      const { availableSeats, student } = req.body;
+      const enrollClass = {
+        $set: {
+                  availableSeats: availableSeats,
+                  student: student
+                },
+      };
+      const result = await classCollection.updateOne(filter, enrollClass, option);
+      res.send(result);
+    });
+
+
+
+
+    // app.patch('/classes/enroll/:id', async (req, res) => {
+    //   try {
+    //     const id = req.params.id;
+        
+    //     const filter = { _id: new ObjectId(id) };
+    //     const option = { upsert: true };
+    //     const { availableSeats, student } = req.body;
+
+    //     const enrollClass = {
+    //       $set: {
+    //         availableSeats: availableSeats,
+    //         student: student
+    //       },
+    //     };
+
+    //     const result = await classCollection.updateOne(filter, enrollClass, option);
+    //     res.send(result);
+    //     console.log(result)
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send('Internal Server Error');
+    //   }
+    // });
+
 
     app.get('/classes/:email', verifyJWT, async (req, res) => {
       const email = req.params.email;
@@ -274,15 +315,18 @@ async function run() {
         const options = {
           projection: {
             _id: 1,
+            enrollClassID: 1,
             name: 1,
             instructorName: 1,
             instructorEmail: 1,
+            availableSeats: 1,
+            student: 1,
             email: 1,
             price: 1
           }
         };
         const result = await enrollCollection.findOne(query, options);
-    
+
         if (result) {
           res.send(result);
         } else {
@@ -292,7 +336,7 @@ async function run() {
         res.status(500).send({ error: true, message: 'Internal server error' });
       }
     });
-    
+
 
     app.get('/enrolls', verifyJWT, async (req, res) => {
       const email = req.query.email;
@@ -317,12 +361,42 @@ async function run() {
       res.send(result);
     })
 
+    app.patch('/enrolls/payment/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const option = { upsert: true };
+      const { date, transactionId, paymentStatus } = req.body;
+      const updatedPayment = {
+        $set: {
+          date: date,
+          transactionId: transactionId,
+          paymentStatus: paymentStatus,
+        },
+      };
+      const result = await enrollCollection.updateOne(filter, updatedPayment, option);
+      res.send(result);
+    });
+
+
     app.delete('/enrolls/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await enrollCollection.deleteOne(query)
       res.send(result)
     })
+
+    // review
+    app.get('/review', async (req, res) => {
+      const result = await reviewCollection.find().toArray();
+      res.send(result);
+    })
+
+    app.post('/review', async (req, res) => {
+      const newData = req.body;
+      const result = await reviewCollection.insertOne(newData)
+      res.send(result)
+    })
+
 
     // payment
     app.post('/create-payment-intent', verifyJWT, async (req, res) => {
@@ -338,7 +412,7 @@ async function run() {
         clientSecret: paymentIntent.client_secret
       })
     })
-    
+
 
 
 
